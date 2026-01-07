@@ -1,4 +1,5 @@
 /bin/
 /vendor/
-.env
 *.exe
+server.exe
+.env
