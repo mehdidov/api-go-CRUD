@@ -9,17 +9,19 @@ import (
 	"os"
 	"time"
 
+	"ProjetAPI-GO-CRUD/internal/handler"
+	"ProjetAPI-GO-CRUD/internal/repository"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv" // Load the .env file
 	_ "github.com/lib/pq"      // Database driver
 )
 
 func main() {
-
 	// Load the .env file that contains our secret configuration
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("Note: Fichier .env non trouvé, utilisation des variables système")
+		log.Println("Note: .env file not found, using system variables")
 	}
 
 	dbHost := os.Getenv("DB_HOST")
@@ -35,34 +37,47 @@ func main() {
 	// Open the connection with database/sql + driver
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		// Stop the application if the configuration is invalid
-		log.Fatal("Impossible d'ouvrir la connexion :", err)
+		log.Fatal("Could not open database connection:", err)
 	}
-
-	// Automatically close resources when the program end
 	defer db.Close()
 
-	// We create a context with a 5 second timeout
+	// Verify database connection with a timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Check if the database connection is actually alive
 	err = db.PingContext(ctx)
 	if err != nil {
-		log.Fatal("La base de données ne répond pas :", err)
+		log.Fatal("Database is not responding:", err)
 	}
 	fmt.Println("Database connection verified!")
 
-	// EXISTING ROUTES
+	// INITIALIZE LAYERS
+	bookRepo := repository.NewPostgresRepository(db)
+	bookHandler := handler.NewBookHandler(bookRepo)
+
+	// ROUTER SETUP
 	r := chi.NewRouter()
 
+	// Health check route
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, `{"status": "OK", "database": "connected"}`)
 	})
 
-	fmt.Printf("Le serveur tourne sur le port 8080 et tente de joindre %s\n", dbHost)
+	// BOOK ROUTES
+	r.Route("/books", func(r chi.Router) {
+		r.Get("/", bookHandler.ListBooks)   // GET /books
+		r.Post("/", bookHandler.CreateBook) // POST /books
+
+		r.Route("/{id}", func(r chi.Router) {
+			r.Get("/", bookHandler.GetBook)       // GET /books/{id}
+			r.Put("/", bookHandler.UpdateBook)    // Update (Point 19 & 20)
+			r.Delete("/", bookHandler.DeleteBook) // Delete (Point 19 & 20)
+		})
+	})
+
+	fmt.Printf("Server is running on port 8080. Connecting to host: %s\n", dbHost)
 
 	// Start the server
 	log.Fatal(http.ListenAndServe(":8080", r))
