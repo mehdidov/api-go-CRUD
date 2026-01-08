@@ -1,21 +1,56 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/joho/godotenv" // Load the .env file
 )
 
 func main() {
+
+	// Load the .env file that contains our secret credentials
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("Note: Fichier .env non trouvé, utilisation des variables système")
+	}
+
+	// Load the .env file that contains our secret configuration
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbUser := os.Getenv("DB_USER")
+	dbPass := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_NAME")
+
+	// Format the connection string
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		dbHost, dbHost, dbUser, dbPass, dbName)
+
+	// Open the connection with database/sql + driver
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		// Stop the application if the configuration is invalid
+		log.Fatal("Impossible d'ouvrir la connexion :", err)
+	}
+
+	// Automatically close resources when the program end
+	defer db.Close()
+
+	// EXISTING ROUTES
 	r := chi.NewRouter()
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, `{"status": "OK"}`)
 	})
 
-	fmt.Println("Le serveur tourne sur le port 8080")
-	http.ListenAndServe(":8080", r)
+	fmt.Printf("Le serveur tourne sur le port 8080 et tente de joindre %s\n", dbHost)
+
+	// Start the server
+	log.Fatal(http.ListenAndServe(":8080", r))
 }
