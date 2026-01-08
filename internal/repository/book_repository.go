@@ -76,7 +76,7 @@ func (r *postgresRepository) GetByID(ctx context.Context, id int) (*model.Book, 
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("database error: %w", err)
 	}
 
 	return &b, nil
